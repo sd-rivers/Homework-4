@@ -218,7 +218,7 @@ tit_train_acc
 
 Compare your model’s testing accuracy to its average accuracy across folds. Describe what you see.
 
-The models testing accuracy almost perfectly matches the training models accuracy.
+The models testing accuracy is lower than the models training accuracy which is to be expected. However, it is not much lower which verifies that we have an acceptable model.
 
 
 ## Required for 231 Students
