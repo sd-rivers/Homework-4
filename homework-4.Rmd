@@ -19,9 +19,36 @@ For this assignment, we will continue working with part of a [Kaggle data set](h
 
 ![Fig. 1: RMS Titanic departing Southampton on April 10, 1912.](images/RMS_Titanic.jpg){width="363"}
 
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(ISLR)
+library(ISLR2)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR)
+library(corrplot)
+tidymodels_prefer()
+
+set.seed(3435)
+```
+
 Load the data from `data/titanic.csv` into *R* and familiarize yourself with the variables it contains using the codebook (`data/titanic_codebook.txt`).
 
+```{r}
+data <- read.csv("data/titanic.csv")
+```
+
 Notice that `survived` and `pclass` should be changed to factors. When changing `survived` to a factor, you may want to reorder the factor so that *"Yes"* is the first level.
+
+```{r}
+titanic <- data %>% 
+  mutate(survived <- as.factor(survived)) %>% 
+  mutate(pclass <- as.factor(pclass))
+
+titanic$survived <- factor(titanic$survived, levels = c("Yes", "No"))
+```
 
 Make sure you load the `tidyverse` and `tidymodels`!
 
@@ -29,17 +56,49 @@ Make sure you load the `tidyverse` and `tidymodels`!
 
 Create a recipe for this dataset **identical** to the recipe you used in Homework 3.
 
+```{r}
+tit_split <- initial_split(titanic, prop = 0.80,
+                                strata = survived)
+tit_train <- training(tit_split)
+tit_test <- testing(tit_split)
+
+tit_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + 
+                           parch + fare, data = tit_train) %>% 
+  step_impute_linear(age, impute_with = imp_vars(pclass, sex, age, sib_sp, 
+                           parch, fare)) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact(terms = ~ starts_with("sex"):fare + age:fare)
+```
+
 ### Question 1
 
 Split the data, stratifying on the outcome variable, `survived.`  You should choose the proportions to split the data into. Verify that the training and testing data sets have the appropriate number of observations. 
+
+```{r}
+tit_split <- initial_split(titanic, prop = 0.80,
+                                strata = survived)
+tit_train <- training(tit_split)
+tit_test <- testing(tit_split)
+
+tit_split
+```
 
 ### Question 2
 
 Fold the **training** data. Use *k*-fold cross-validation, with $k = 10$.
 
+```{r}
+tit_folds <- vfold_cv(tit_train, v = 10)
+tit_folds
+```
+
 ### Question 3
 
 In your own words, explain what we are doing in Question 2. What is *k*-fold cross-validation? Why should we use it, rather than simply fitting and testing models on the entire training set? If we **did** use the entire training set, what resampling method would that be?
+
+We are dividing the data set into 10 groups. Then we are taking the first of those groups to be the testing set and the remaining 9 to be the training set. Then we take the 2nd set to be the testing set and the remaining 9 to be the training set. So on so forth.
+
+If we are drawing from the entire data set repeatedly that method is called bootstrapping. 
 
 ### Question 4
 
@@ -51,9 +110,81 @@ Set up workflows for 3 models:
 
 How many models, total, across all folds, will you be fitting to the data? To answer, think about how many folds there are, and how many models you'll fit to each fold.
 
+There will be 30 models.
+
+```{r}
+# degree_grid <- grid_regular(degree(range = c(1, 10)), levels = 10)
+# degree_grid
+# 
+# poly_tuned_wf <- workflow() %>%
+#   add_recipe(poly_tuned_rec) %>%
+#   add_model(lm_spec)
+# 
+# tune_res <- tune_grid(
+#   object = log_wkflow,
+#   resamples = tit_folds,
+#   grid = degree_grid
+# )
+
+log_reg <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+log_wkflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(tit_recipe)
+
+
+lda_mod <- discrim_linear() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+lda_wkflow <- workflow() %>% 
+  add_model(lda_mod) %>% 
+  add_recipe(tit_recipe)
+
+
+qda_mod <- discrim_quad() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+qda_wkflow <- workflow() %>% 
+  add_model(qda_mod) %>% 
+  add_recipe(tit_recipe)
+
+```
+
 ### Question 5
 
 Fit each of the models created in Question 4 to the folded data.
+
+```{r, eval = FALSE}
+
+tune_res_log <- tune_grid(
+  object = log_wkflow,
+  resamples = tit_folds,
+  grid = degree_grid
+)
+
+tune_res_lda <- tune_grid(
+  object = lda_wkflow,
+  resamples = tit_folds,
+  grid = degree_grid
+)
+
+tune_res_qda <- tune_grid(
+  object = qda_wkflow,
+  resamples = tit_folds,
+  grid = degree_grid
+)
+
+```
+
+```{r}
+save(tune_res_log, tune_res_lda, tune_res_qda, file = "data/models.rda")
+rm(tune_res_log, tune_res_lda, tune_res_qda)
+load(file = "data/models.rda")
+```
 
 **IMPORTANT:** *Some models may take a while to run – anywhere from 3 to 10 minutes. You should NOT re-run these models each time you knit. Instead, run them once, using an R script, and store your results; look into the use of [loading and saving](https://www.r-bloggers.com/2017/04/load-save-and-rda-files/). You should still include the code to run them when you knit, but set `eval = FALSE` in the code chunks.*
 
@@ -63,15 +194,44 @@ Use `collect_metrics()` to print the mean and standard errors of the performance
 
 Decide which of the 3 fitted models has performed the best. Explain why. *(Note: You should consider both the mean accuracy and its standard error.)*
 
+```{r}
+metrics_log <- collect_metrics(tune_res_log)
+metrics_lda <- collect_metrics(tune_res_lda)
+metrics_qda <- collect_metrics(tune_res_qda)
+
+c(metrics_log$mean[1]-metrics_log$std_err[1], metrics_log$mean[1]+metrics_log$std_err[1])
+c(metrics_lda$mean[1]-metrics_lda$std_err[1], metrics_lda$mean[1]+metrics_lda$std_err[1])
+c(metrics_qda$mean[1]-metrics_qda$std_err[1], metrics_qda$mean[1]+metrics_qda$std_err[1])
+```
+
+It appears that the logistic regression has the highest accuracy taking mean and standard deviation into account.
+
 ### Question 7
 
 Now that you’ve chosen a model, fit your chosen model to the entire training dataset (not to the folds).
+
+```{r}
+log_fit <- fit(log_wkflow, tit_train)
+```
 
 ### Question 8
 
 Finally, with your fitted model, use `predict()`, `bind_cols()`, and `accuracy()` to assess your model’s performance on the testing data!
 
+```{r}
+predict(log_fit, new_data = tit_test, type = "prob")
+
+log_reg_acc <- augment(log_fit, new_data = tit_test) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+
+tit_train_acc <- bind_cols(log_reg_acc$.estimate, metrics_log$mean[1] )
+tit_train_acc
+```
+
 Compare your model’s testing accuracy to its average accuracy across folds. Describe what you see.
+
+The models testing accuracy almost perfectly matches the training models accuracy.
+
 
 ## Required for 231 Students
 
