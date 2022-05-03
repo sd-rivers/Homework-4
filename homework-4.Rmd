@@ -113,18 +113,6 @@ How many models, total, across all folds, will you be fitting to the data? To an
 There will be 30 models.
 
 ```{r}
-# degree_grid <- grid_regular(degree(range = c(1, 10)), levels = 10)
-# degree_grid
-# 
-# poly_tuned_wf <- workflow() %>%
-#   add_recipe(poly_tuned_rec) %>%
-#   add_model(lm_spec)
-# 
-# tune_res <- tune_grid(
-#   object = log_wkflow,
-#   resamples = tit_folds,
-#   grid = degree_grid
-# )
 
 log_reg <- logistic_reg() %>% 
   set_engine("glm") %>% 
@@ -181,7 +169,7 @@ tune_res_qda <- tune_grid(
 ```
 
 ```{r}
-save(tune_res_log, tune_res_lda, tune_res_qda, file = "data/models.rda")
+#save(tune_res_log, tune_res_lda, tune_res_qda, file = "data/models.rda")
 rm(tune_res_log, tune_res_lda, tune_res_qda)
 load(file = "data/models.rda")
 ```
